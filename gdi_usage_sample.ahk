@@ -13,7 +13,7 @@ memDC := new memoryDC(startWidth, startHeight)
 memDC.setFont("Consolas")
 
 ;Draw a face
-faceDC := new memoryDC(100, 100)
+faceDC := new memoryDC(25, 25)
 faceDC.setBrush(0x00FFFF)
 faceDC.setPen(0x000000)
 faceDC.ellipse(50, 50, 50, 50)  ;x = 100, y = 100, radius_x = 50, radius_y = 50
@@ -41,27 +41,24 @@ Loop
   ;Note: can use 'continue' in place of sleep, 1
   ;This lets you reach higher fps but blows up cpu usage (since there is no sleeping)
   while(t.check() < nextframe)
-    sleep, 1
+    sleep 1
 
   ;It's best to draw to a memoryDC rather than directly to the window
   ;Once the scene is drawn, it can be pushed to the window
   memDC.setBrush(0xAA00FF) ; 0xBBGGRR
   memDC.rectangle(0, 0, memDC.getWidth(), memDC.getHeight())  ;x = 0, y = 0, w = memDC width, h = memDC height
   ;tile memDC with faces
-  Loop, % i := 9
+  Loop, % j := memDC.getWidth() // 25
   {
-    offset := 10*A_Index
-    Loop, % j := memDC.getWidth() // 100
+    xpos := 25*A_Index-25
+    Loop, % k := memDC.getHeight() // 25
     {
-      xpos := 100*A_Index-offset
-      Loop, % k := memDC.getHeight() // 100
-      {
-        ypos := 100*A_Index-offset
-        ;copy faceDC into memDC at (xpos, ypos) with width 100 and height 100
-        memDC.bitblt(faceDC, xpos, ypos, 100, 100)
-      }
+      ypos := 25*A_Index-25
+      ;copy faceDC into memDC at (xpos, ypos) with width 100 and height 100
+      memDC.bitblt(faceDC, xpos, ypos, 25, 25)
     }
   }
+
   
   ;Calculate fps if needed
   if (mod(A_Index, fpsInterval) = 0)
@@ -74,7 +71,7 @@ Loop
   memDC.setPen(0xFFFFFF, 3)
   memDC.rectangle(10, 10, 120, 45)
   memDC.write("FPS: " fps, 15, 15)
-  memDC.write("Tiles: " i*j*k, 15, 30)
+  memDC.write("Tiles: " j*k, 15, 30)
   ;This actually puts the contents of memDC onto the window
   winDC.bitblt(memDC)
 }
