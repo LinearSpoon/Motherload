@@ -42,7 +42,7 @@ Loop
   ;This lets you reach higher fps but blows up cpu usage (since there is no sleeping)
   while(t.check() < nextframe)
     sleep, 1
-  msgbox % t.toMSMs()
+
   ;It's best to draw to a memoryDC rather than directly to the window
   ;Once the scene is drawn, it can be pushed to the window
   memDC.setBrush(0xAA00FF) ; 0xBBGGRR
