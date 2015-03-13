@@ -1,5 +1,6 @@
 ﻿;Not meant to be used directly
 ;Make a class that extends DC - ensure this.dc is a valid dc and call DC.__New() in constructor
+;extended classes should implement getWidth, getHeight, getDimensions, and resize
 class DC
 {
   __New()
@@ -100,6 +101,13 @@ class DC
      ; sw := NumGet(bm, 4, "int"), sh := NumGet(bm, 8, "int")
     DllCall("StretchBlt", "ptr", this.dc, "int", dx, "int", dy, "int", dw ? dw : this.getWidth(), "int", dh ? dh : this.getHeight()
            , "ptr", srcDC.dc, "int", sx, "int", sy, "int", sw ? sw : srcDC.getWidth(), "int", sh ? sh : srcDC.getHeight(), "uint", raster)
+  }
+  
+  ;Note: 0 alpha = src is transparent, 255 alpha = src is opaque
+  alphablend(srcDC, dx=0, dy=0, dw=0, dh=0, sx=0, sy=0, sw=0, sh=0, alpha=255)
+  {
+    DllCall("GdiAlphaBlend", "ptr", this.dc, "int", dx, "int", dy, "int", dw ? dw : this.getWidth(), "int", dh ? dh : this.getHeight()
+           , "ptr", srcDC.dc, "int", sx, "int", sy, "int", sw ? sw : srcDC.getWidth(), "int", sh ? sh : srcDC.getHeight(), "uint", alpha << 16)
   }
   
   write(text, x, y)
@@ -311,5 +319,62 @@ class windowDC extends DC
   resize(newWidth, newHeight)
   {
     Gui, % this.hwnd ": Show", w%newWidth% h%newHeight%
+  }
+}
+
+;Use if you have an hdc already - in this case, you are responsible for freeing the dc
+class shellDC extends DC
+{
+  __New(hdc)
+  {
+    this.dc := hdc
+  }
+  
+  __Delete()
+  {
+    if (this.hmodule)
+      DllCall("FreeLibrary", "ptr", this.hmodule)
+  }
+  
+  getDimensions(byref w, byref h)
+  {
+    VarSetCapacity(BITMAP, 32, 0)
+    hbm := DllCall("GetCurrentObject", "ptr", this.dc, "uint", 7, "ptr")
+    DllCall("GetObject", "ptr", hbm, "int", A_PtrSize = 4 ? 24 : 32, "ptr", &BITMAP)
+    w := NumGet(BITMAP, 4, "int"), h := NumGet(BITMAP, 8, "int")
+  }
+  
+  getWidth()
+  {
+    VarSetCapacity(BITMAP, 32, 0)
+    hbm := DllCall("GetCurrentObject", "ptr", this.dc, "uint", 7, "ptr")
+    DllCall("GetObject", "ptr", hbm, "int", A_PtrSize = 4 ? 24 : 32, "ptr", &BITMAP)
+    return NumGet(BITMAP, 4, "int")
+  }
+  
+  getHeight()
+  {
+    VarSetCapacity(BITMAP, 32, 0)
+    hbm := DllCall("GetCurrentObject", "ptr", this.dc, "uint", 7, "ptr")
+    DllCall("GetObject", "ptr", hbm, "int", A_PtrSize = 4 ? 24 : 32, "ptr", &BITMAP)
+    return NumGet(BITMAP, 8, "int")
+  }
+  
+  resize(newWidth, newHeight, stretch=true)
+  {
+    hbm := DllCall("CreateCompatibleBitmap", "ptr", this.dc, "int", newWidth, "int", newHeight)
+    ;Select new bitmap into a dc
+    dctmp := DllCall("CreateCompatibleDC", "ptr", this.dc)
+    defbm := DllCall("SelectObject", "ptr", dctmp, "ptr", hbm)
+    ;Copy the old bitmap into a new bitmap
+    if (stretch)
+      DllCall("StretchBlt", "ptr", dctmp, "int", 0, "int", 0, "int", newWidth, "int", newHeight, "ptr", this.dc, "int", 0, "int", 0, "int", this.getWidth(), "int", this.getHeight(), "uint", 0xCC0020)
+    else
+      DllCall("BitBlt", "ptr", dctmp, "int", 0, "int", 0, "int", newWidth, "int", newHeight, "ptr", this.dc, "int", 0, "int", 0, "uint", 0xCC0020)
+    ;Put default bitmap back and delete temporary dc
+    DllCall("SelectObject", "ptr", dctmp, "ptr", defbm)
+    DllCall("DeleteDC", "ptr", dctmp)
+    ;Install the new bitmap and delete the old one
+    DllCall("DeleteObject", "ptr", this.select(hbm))
   }
 }
