@@ -2,9 +2,9 @@
 #NoEnv
 #SingleInstance Force
 
-#include render.ahk
 #include gdi.ahk
 #include timer.ahk
+#include render.ahk
 
 SetBatchLines, -1
 

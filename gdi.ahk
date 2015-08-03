@@ -1,7 +1,7 @@
 ﻿;Not meant to be used directly
 ;Make a class that extends DC - ensure this.dc is a valid dc and call DC.__New() in constructor
 ;extended classes should implement getWidth, getHeight, getDimensions, and resize
-class DC
+class baseDC
 {
   __New()
   {
@@ -9,7 +9,7 @@ class DC
     this.oldBrush := this.select(DllCall("CreatePen", "int", 0, "int", 1, "uint", 0))
     this.oldFont := this.select(DllCall("CreateFont", "int", 0, "int", 0, "int", 0, "int", 0, "int", 400, "uint", false, "uint", false, "uint", false "uint", 1, "uint", 0, "uint", 0, "uint", 4, "uint", 0, "str", ""))
     DllCall("SetBkMode", "ptr", this.dc, "int", 1) ;Transparent
-    DllCall("SetStretchBltMode", "ptr", this.dc, "int", 4) ;Halftone (Antialias)
+    DllCall("SetStretchBltMode", "ptr", this.dc, "int", 3) ;COLORONCOLOR
   }
   
   __Delete()
@@ -45,6 +45,14 @@ class DC
   {
     hPen := DllCall("CreatePen", "int", style, "int", width, "uint", BBGGRR)
     DllCall("DeleteObject", "ptr", this.select(hPen))
+  }
+  
+  clear(BBGGRR)
+  {
+    hBrush := this.select(DllCall("CreateSolidBrush", "uint", BBGGRR))
+    hPen := this.select(DllCall("CreatePen", "int", 0, "int", 0, "uint", BBGGRR))
+    DllCall("Rectangle", "ptr", this.dc, "int", 0, "int", 0, "int", this.getWidth(), "int", this.getHeight())
+    DllCall("DeleteObject", "ptr", this.select(hPen)), DllCall("DeleteObject", "ptr", this.select(hBrush))
   }
   
   rectangle(x, y, w, h)
@@ -177,18 +185,119 @@ class DC
     DllCall("DeleteObject", "ptr", DllCall("SelectObject", "ptr", tmpdc, "ptr", obm))
     DllCall("DeleteDC", "ptr", tmpdc)
   }
+  
+  enableAdvancedGraphics()
+  {
+    DllCall("SetGraphicsMode", "ptr", this.dc, "int", 2)
+  }
+  
+  ;https://msdn.microsoft.com/en-us/library/dd145228(v=vs.85).aspx
+  setWorldTransform(eM11=1, eM12=0, eM21=0, eM22=1, eDx=0, eDy=0)
+  {
+    VarSetCapacity(XFORM, 24)
+    Numput(eM11, XFORM, 0, "float"), Numput(eM12, XFORM, 4, "float"), Numput(eM21, XFORM, 8, "float")
+    , Numput(eM22, XFORM, 12, "float"), Numput(eDx, XFORM, 16, "float"), Numput(eDy, XFORM, 20, "float")
+    DllCall("SetWorldTransform", "ptr", this.dc, "ptr", &XFORM)
+  }
+  
+  ;mode values:
+  ;MWT_IDENTITY 1
+  ;MWT_LEFTMULTIPLY 2
+  ;MWT_RIGHTMULTIPLY 3
+  modifyWorldTransform(eM11=1, eM12=0, eM21=0, eM22=1, eDx=0, eDy=0, mode=3)
+  {
+    VarSetCapacity(XFORM, 24)
+    Numput(eM11, XFORM, 0, "float"), Numput(eM12, XFORM, 4, "float"), Numput(eM21, XFORM, 8, "float")
+    , Numput(eM22, XFORM, 12, "float"), Numput(eDx, XFORM, 16, "float"), Numput(eDy, XFORM, 20, "float")
+    DllCall("ModifyWorldTransform", "ptr", this.dc, "ptr", &XFORM, "uint", mode)
+  }
+  
+  ;http://www.functionx.com/visualc/gdi/gdicoord.htm
+  setMapMode(mode)
+  {
+    DllCall("SetMapMode", "ptr", this.dc, "int", mode)
+  }
+  
+  ;MM_ANISOTROPIC 8
+  ;MM_ISOTROPIC 7
+  ;MM_LOENGLISH 4
+  SetViewportExt(w, h)
+  {
+    DllCall("SetViewportExtEx", "ptr", this.dc, "int", w, "int", h, "ptr", 0)
+  }
+  
+  SetWindowExt(w, h)
+  {
+    DllCall("SetWindowExtEx", "ptr", this.dc, "int", w, "int", h, "ptr", 0)
+  }
+  
+  SetViewportOrigin(x, y)
+  {
+    DllCall("SetViewportOrgEx", "ptr", this.dc, "int", x, "int", y, "ptr", 0)
+  }
+  
+  GetViewportOrigin(byref x, byref y)
+  {
+    DllCall("GetViewportOrgEx", "ptr", this.dc, "int64*", p)
+    x := p & 0xFFFFFFFF, y := p >> 32
+  }
+  
+  SetWindowOrigin(x, y)
+  {
+    DllCall("SetWindowOrgEx", "ptr", this.dc, "int", x, "int", y, "ptr", 0)
+  }
+  
+  GetWindowOrigin(byref x, byref y)
+  {
+    DllCall("GetWindowOrgEx", "ptr", this.dc, "int64*", p)
+    x := p & 0xFFFFFFFF, y := p >> 32
+  }
+
+  DPtoLP(byref x, byref y)
+  {
+    p := x | (y << 32)
+    DllCall("DPtoLP", "ptr", this.dc, "int64*", p, "int", 1)
+    x := p & 0xFFFFFFFF, y := p >> 32
+  }
+
+
+  LPtoDP(byref x, byref y)
+  {
+    p := x | (y << 32)
+    DllCall("LPtoDP", "ptr", this.dc, "int64*", p, "int", 1)
+    x := p & 0xFFFFFFFF, y := p >> 32
+  }
+  
+  measureString(str, byref w, byref h)
+  {
+    DllCall("GetTextExtentPoint32", "ptr", this.dc, "str", str, "int", StrLen(str), "int64*", p)
+    w := p & 0xFFFFFFFF, h := p >> 32
+  }
+  
+  RGBtoBGR(color)
+  {
+    return ((color & 0xFF0000) >> 16) | (color & 0xFF00) | ((color & 0xFF) << 16)
+  }
+  
+  saveState()
+  {
+    this.DCSavedState := DllCall("SaveDC", "ptr", this.dc)
+  }
+  
+  restoreState()
+  {
+    DllCall("RestoreDC", "ptr", this.dc, "int", this.DCSavedState)
+  }
 }
 
-class memoryDC extends DC
+class memoryDC extends baseDC
 {
   __New(initialWidth, initialHeight, compatibleDC = 0, hbm = 0)
   {
-    needToFreeDC := !compatibleDC
-    compatibleDC := compatibleDC ? compatibleDC : DllCall("GetDC", "ptr", 0)
-    this.dc := DllCall("CreateCompatibleDC", "ptr", compatibleDC)
-    hbm := hbm ? hbm : DllCall("CreateCompatibleBitmap", "ptr", compatibleDC, "int", initialWidth, "int", initialHeight)
-    if (needToFreeDC)
-      DllCall("ReleaseDC", "ptr", 0, "ptr", compatibleDC)
+    this.needToFreeDC := !compatibleDC
+    this.cdc := compatibleDC ? compatibleDC : DllCall("GetDC", "ptr", 0)
+    this.dc := DllCall("CreateCompatibleDC", "ptr", this.cdc)
+    hbm := hbm ? hbm : DllCall("CreateCompatibleBitmap", "ptr", this.cdc, "int", initialWidth, "int", initialHeight)
     this.oldBM := this.select(hbm)
     this.w := initialWidth, this.h := initialHeight
     base.__New()
@@ -199,6 +308,8 @@ class memoryDC extends DC
     base.__Delete()
     DllCall("DeleteObject", "ptr", this.select(this.oldBM))
     DllCall("DeleteDC", "ptr", this.dc)
+    if (this.needToFreeDC)
+      DllCall("ReleaseDC", "ptr", 0, "ptr", this.cdc)
   }
 
   getDimensions(byref w, byref h)
@@ -216,17 +327,15 @@ class memoryDC extends DC
     return this.h
   }
   
-  resize(newWidth, newHeight, stretch=true)
+  resize(newWidth, newHeight, stretch=false)
   {
-    hbm := DllCall("CreateCompatibleBitmap", "ptr", this.dc, "int", newWidth, "int", newHeight)
+    hbm := DllCall("CreateCompatibleBitmap", "ptr", this.cdc, "int", newWidth, "int", newHeight)
     ;Select new bitmap into a dc
-    dctmp := DllCall("CreateCompatibleDC", "ptr", this.dc)
+    dctmp := DllCall("CreateCompatibleDC", "ptr", this.cdc)
     defbm := DllCall("SelectObject", "ptr", dctmp, "ptr", hbm)
     ;Copy the old bitmap into a new bitmap
     if (stretch)
       DllCall("StretchBlt", "ptr", dctmp, "int", 0, "int", 0, "int", newWidth, "int", newHeight, "ptr", this.dc, "int", 0, "int", 0, "int", this.w, "int", this.h, "uint", 0xCC0020)
-    else
-      DllCall("BitBlt", "ptr", dctmp, "int", 0, "int", 0, "int", newWidth, "int", newHeight, "ptr", this.dc, "int", 0, "int", 0, "uint", 0xCC0020)
     ;Put default bitmap back and delete temporary dc
     DllCall("SelectObject", "ptr", dctmp, "ptr", defbm)
     DllCall("DeleteDC", "ptr", dctmp)
@@ -258,8 +367,8 @@ class imageDC extends memoryDC
   }
 }
 
-;Intended for use with AHK windows
-class windowDC extends DC
+;Intended for use with AHK windows or controls
+class windowDC extends baseDC
 {
   __New(hwnd)
   {
@@ -318,12 +427,12 @@ class windowDC extends DC
   
   resize(newWidth, newHeight)
   {
-    Gui, % this.hwnd ": Show", w%newWidth% h%newHeight%
+    DllCall("SetWindowPos", "ptr", this.hwnd, "ptr", 0, "int", 0, "int", 0, "int", newWidth, "int", newHeight, "uint", 534)
   }
 }
 
 ;Use if you have an hdc already - in this case, you are responsible for freeing the dc
-class shellDC extends DC
+class shellDC extends baseDC
 {
   __New(hdc)
   {
